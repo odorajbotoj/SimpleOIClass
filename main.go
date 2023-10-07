@@ -2,8 +2,8 @@
 // work by 2207xuezihao (odorajbotoj)
 // jf3 control system
 // teacher
-// version 1
-// 23 09 25
+// version 2
+// 23 10 07
 package main
 
 import (
@@ -89,7 +89,8 @@ func getID(ip string) (string, int) { // 获取学生姓名
 	if string(name) == "" {
 		return "请联系教师修改", 0
 	}
-	return string(name), len(name)
+	r := strings.NewReplacer("\r", "", "\n", "") // 去除CR, LF
+	return r.Replace(string(name)), len(name)
 }
 
 func uFunc(w http.ResponseWriter, r *http.Request) { // 处理上传文件的POST
