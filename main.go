@@ -1,12 +1,13 @@
 // zjyz oi lab
 // work by 2207xuezihao (odorajbotoj)
-// jf3 control system
-// teacher
-// version 2
+// Simple OI Class
+// server
+// version 3
 // 23 10 07
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -17,11 +18,12 @@ import (
 	"strings"
 )
 
-const (
+var ( // 默认配置
 	SEND_DIR      string = "send/"  // 教师下发的文件
 	UPLD_ROOT_DIR string = "upld/"  // 学生上传的文件根目录
 	ID_MAP_DIR    string = "idmap/" // ip与id的对照规则
 	PORT          string = ":8080"  // 服务使用的端口号
+	ACCEPT        string = ".cpp"   // 允许上传的文件后缀
 )
 
 func getSend() string { // 获取教师下发的文件
@@ -75,10 +77,10 @@ func getIP(r *http.Request) string { // 获取ip地址
 }
 
 func getID(ip string) (string, int) { // 获取学生姓名
-	name, err := ioutil.ReadFile(ID_MAP_DIR + ip)
+	name, err := ioutil.ReadFile(ID_MAP_DIR + ip + ".txt")
 	if err != nil {
 		if os.IsNotExist(err) {
-			err = ioutil.WriteFile(ID_MAP_DIR+ip, []byte(""), 0644)
+			err = ioutil.WriteFile(ID_MAP_DIR+ip+".txt", []byte(""), 0644)
 			if err != nil {
 				log.Println("get id err: ", err)
 			}
@@ -113,13 +115,15 @@ func uFunc(w http.ResponseWriter, r *http.Request) { // 处理上传文件的POS
 
 	for _, f := range files {
 		fn := f.Filename
-		if f.Size > 102400 || strings.HasSuffix(fn, ".cpp") { // 非cpp文件不收取
+		if f.Size < 102400 {
 			fr, _ := f.Open()
 			fo, _ := os.Create(UPLD_ROOT_DIR + id + "/" + fn)
 			io.Copy(fo, fr)
 			fo.Close()
 			fr.Close()
 			log.Println(ip + " '" + id + "' uploaded '" + fn + "'")
+		} else {
+			continue
 		}
 	}
 	http.Redirect(w, r, "/", http.StatusFound)
@@ -163,16 +167,74 @@ func rootFunc(w http.ResponseWriter, r *http.Request) {
 	ip := getIP(r)
 	id, _ := getID(ip)
 	log.Println(ip + " '" + id + "' connected.")
-	w.Write([]byte(fmt.Sprintf(ROOT_HTML, ip, id, getSend(), getUpld(ip))))
+	w.Write([]byte(fmt.Sprintf(ROOT_HTML, ip, id, getSend(), ACCEPT, ACCEPT, getUpld(ip))))
 	return
 }
 
-func main() {
+func init() {
 	log.Println("ZJYZIT LAB")
 	log.Println("Simple OI Class")
 	log.Println("teacher")
-	log.Println("version 1")
+	log.Println("version 3")
 
+	// 读取配置文件
+	// 使用K=V形式
+	// https://www.cnblogs.com/rickiyang/p/11074169.html
+	config := make(map[string]string)
+	f, err := os.Open("config.txt")
+	defer f.Close()
+	if err != nil {
+		log.Println("无法读取config.txt")
+		return
+	}
+	r := bufio.NewReader(f)
+	for {
+		b, _, err := r.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Println("在读取config.txt的过程中出错")
+			continue
+		}
+		s := strings.TrimSpace(string(b))
+		index := strings.Index(s, "=")
+		if index < 0 {
+			continue
+		}
+		key := strings.TrimSpace(s[:index])
+		if len(key) == 0 {
+			continue
+		}
+		value := strings.TrimSpace(s[index+1:])
+		if len(value) == 0 {
+			continue
+		}
+		config[key] = value
+	}
+	if _, ok := config["SEND"]; ok {
+		SEND_DIR = config["SEND"]
+		log.Println("set SEND_DIR = ", SEND_DIR)
+	}
+	if _, ok := config["UPLD"]; ok {
+		UPLD_ROOT_DIR = config["UPLD"]
+		log.Println("set UPLD_ROOT_DIR = ", UPLD_ROOT_DIR)
+	}
+	if _, ok := config["IDMAP"]; ok {
+		ID_MAP_DIR = config["IDMAP"]
+		log.Println("set ID_MAP_DIR = ", ID_MAP_DIR)
+	}
+	if _, ok := config["PORT"]; ok {
+		PORT = config["PORT"]
+		log.Println("set PORT = ", PORT)
+	}
+	if _, ok := config["ACCEPT"]; ok {
+		ACCEPT = config["ACCEPT"]
+		log.Println("set ACCEPT = ", ACCEPT)
+	}
+}
+
+func main() {
 	// http server
 	http.HandleFunc("/", rootFunc)
 	http.HandleFunc("/send", sendFunc)
@@ -217,10 +279,10 @@ const ROOT_HTML = `<!DOCTYPE html>
     <div id="upload">
       <h2>提交的文件</h2>
       <div style="background:#DDFCFA;border-radius:15px;">
-        <p>· 提交源代码（如problem.cpp）, 其它文件不会被收取. 根据NOI相关规定，单个文件大小不得大于100KB. </p>
+        <p>· 提交文件（如problem.cpp）, 单个文件大小不得大于100KB, 一次性提交文件大小总和不得大于400KB. 允许的类型：%s</p>
         <ul>
           <form method="post" action="/u" enctype="multipart/form-data">
-            <input type="file" id="file" name="file" accept=".cpp" multiple style="background:white;border-radius:3px;" />
+            <input type="file" id="file" name="file" accept="%s" multiple style="background:white;border-radius:3px;" />
             <input type="submit" value="提交" />
           </form>
         </ul>
@@ -233,7 +295,7 @@ const ROOT_HTML = `<!DOCTYPE html>
     <p>不要哀求 学会进取 若是如此 终有所获</p>
     <p>物来顺应 未来不迎 当时不杂 既过不恋</p>
     <p>ZJYZIT LAB</p>
-    <p>2023.09.26</p>
+    <p>2023.10.07</p>
   </body>
 </html>
 `
