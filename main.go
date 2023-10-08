@@ -2,8 +2,8 @@
 // work by 2207xuezihao (odorajbotoj)
 // Simple OI Class
 // server
-// version 3
-// 23 10 07
+// version 4.0.0
+// 23 10 08
 package main
 
 import (
@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 )
 
@@ -24,9 +25,52 @@ var ( // 默认配置
 	ID_MAP_DIR    string = "idmap/" // ip与id的对照规则
 	PORT          string = ":8080"  // 服务使用的端口号
 	ACCEPT        string = ".cpp"   // 允许上传的文件后缀
+	REG           bool   = false    // 是否为注册模式
 )
 
+func readKVMap(filename string) map[string]string {
+	// 读取文件
+	// 使用K=V形式
+	// https://www.cnblogs.com/rickiyang/p/11074169.html
+	m := make(map[string]string)
+	f, err := os.Open(filename)
+	defer f.Close()
+	if err != nil {
+		log.Println("无法读取" + filename)
+		return m
+	}
+	r := bufio.NewReader(f)
+	for {
+		b, _, err := r.ReadLine()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Println("在读取" + filename + "的过程中出错. Skip.")
+			continue
+		}
+		s := strings.TrimSpace(string(b))
+		index := strings.Index(s, "=")
+		if index < 0 {
+			continue
+		}
+		key := strings.TrimSpace(s[:index])
+		if len(key) == 0 {
+			continue
+		}
+		value := strings.TrimSpace(s[index+1:])
+		if len(value) == 0 {
+			continue
+		}
+		m[key] = value
+	}
+	return m
+}
+
 func getSend() string { // 获取教师下发的文件
+	if REG {
+		return ""
+	}
 	rd, err := ioutil.ReadDir(SEND_DIR)
 	if err != nil {
 		log.Println("readSend: ", err)
@@ -42,6 +86,9 @@ func getSend() string { // 获取教师下发的文件
 }
 
 func sendFunc(w http.ResponseWriter, r *http.Request) { // 下载教师下发的文件
+	if REG {
+		return
+	}
 	fn, err := url.QueryUnescape(r.URL.Query().Get("fn"))
 	if fn == "" && err == nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -78,24 +125,51 @@ func getIP(r *http.Request) string { // 获取ip地址
 
 func getID(ip string) (string, int) { // 获取学生姓名
 	name, err := ioutil.ReadFile(ID_MAP_DIR + ip + ".txt")
+	if len(name) >= 3 {
+		if name[0] == 0xEF || name[1] == 0xBB || name[2] == 0xBF { // 去除UTF-8 BOM以适配Windows记事本
+			name = name[3:]
+		}
+	}
+	r := strings.NewReplacer("\r", "", "\n", "") // 去除CR, LF
 	if err != nil {
 		if os.IsNotExist(err) {
 			err = ioutil.WriteFile(ID_MAP_DIR+ip+".txt", []byte(""), 0644)
 			if err != nil {
 				log.Println("get id err: ", err)
 			}
-			return "已新建记录，请联系教师修改", 0
+			return "已新建记录，未设置姓名", 0
 		}
 		return "", 0
 	}
 	if string(name) == "" {
-		return "请联系教师修改", 0
+		return "未设置姓名", 0
 	}
-	r := strings.NewReplacer("\r", "", "\n", "") // 去除CR, LF
 	return r.Replace(string(name)), len(name)
 }
 
+func regFunc(w http.ResponseWriter, r *http.Request) {
+	if !REG {
+		return
+	}
+	err := r.ParseForm()
+	if err != nil {
+		log.Println("ParseForm err: ", err)
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	ip := getIP(r)
+	err = ioutil.WriteFile(ID_MAP_DIR+ip+".txt", []byte(r.Form["username"][0]), 0644)
+	if err != nil {
+		log.Println("set id err: ", err)
+	}
+	http.Redirect(w, r, "/", http.StatusFound)
+	return
+}
+
 func uFunc(w http.ResponseWriter, r *http.Request) { // 处理上传文件的POST
+	if REG {
+		return
+	}
 	ip := getIP(r)
 	id, idn := getID(ip)
 	if idn == 0 { // 未填写姓名则不做处理
@@ -112,16 +186,16 @@ func uFunc(w http.ResponseWriter, r *http.Request) { // 处理上传文件的POS
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
-
 	for _, f := range files {
-		fn := f.Filename
 		if f.Size < 102400 {
-			fr, _ := f.Open()
-			fo, _ := os.Create(UPLD_ROOT_DIR + id + "/" + fn)
-			io.Copy(fo, fr)
-			fo.Close()
-			fr.Close()
-			log.Println(ip + " '" + id + "' uploaded '" + fn + "'")
+			if find := strings.Contains(ACCEPT, path.Ext(f.Filename)); find {
+				fr, _ := f.Open()
+				fo, _ := os.Create(UPLD_ROOT_DIR + id + "/" + f.Filename)
+				io.Copy(fo, fr)
+				fo.Close()
+				fr.Close()
+				log.Println(ip + " '" + id + "' uploaded '" + f.Filename + "'")
+			}
 		} else {
 			continue
 		}
@@ -150,6 +224,9 @@ func getUpld(ip string) string { // 列出上传的文件
 }
 
 func delFunc(w http.ResponseWriter, r *http.Request) { // 删除上传的文件
+	if REG {
+		return
+	}
 	fn, err := url.QueryUnescape(r.URL.Query().Get("fn"))
 	ip := getIP(r)
 	id, idn := getID(ip)
@@ -167,51 +244,21 @@ func rootFunc(w http.ResponseWriter, r *http.Request) {
 	ip := getIP(r)
 	id, _ := getID(ip)
 	log.Println(ip + " '" + id + "' connected.")
-	w.Write([]byte(fmt.Sprintf(ROOT_HTML, ip, id, getSend(), ACCEPT, ACCEPT, getUpld(ip))))
+	if !REG {
+		w.Write([]byte(fmt.Sprintf(ROOT_HTML, ip, id, getSend(), ACCEPT, ACCEPT, getUpld(ip))))
+	} else {
+		w.Write([]byte(fmt.Sprintf(REG_HTML, ip, id)))
+	}
 	return
 }
 
 func init() {
 	log.Println("ZJYZIT LAB")
 	log.Println("Simple OI Class")
-	log.Println("teacher")
-	log.Println("version 3")
+	log.Println("server")
+	log.Println("version 4.0.0")
 
-	// 读取配置文件
-	// 使用K=V形式
-	// https://www.cnblogs.com/rickiyang/p/11074169.html
-	config := make(map[string]string)
-	f, err := os.Open("config.txt")
-	defer f.Close()
-	if err != nil {
-		log.Println("无法读取config.txt")
-		return
-	}
-	r := bufio.NewReader(f)
-	for {
-		b, _, err := r.ReadLine()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			log.Println("在读取config.txt的过程中出错")
-			continue
-		}
-		s := strings.TrimSpace(string(b))
-		index := strings.Index(s, "=")
-		if index < 0 {
-			continue
-		}
-		key := strings.TrimSpace(s[:index])
-		if len(key) == 0 {
-			continue
-		}
-		value := strings.TrimSpace(s[index+1:])
-		if len(value) == 0 {
-			continue
-		}
-		config[key] = value
-	}
+	config := readKVMap("config.txt")
 	if _, ok := config["SEND"]; ok {
 		SEND_DIR = config["SEND"]
 		log.Println("set SEND_DIR = ", SEND_DIR)
@@ -232,15 +279,24 @@ func init() {
 		ACCEPT = config["ACCEPT"]
 		log.Println("set ACCEPT = ", ACCEPT)
 	}
+	if v, ok := config["REG"]; ok {
+		if v == "ON" {
+			REG = true
+			log.Println("set REG =  true")
+		}
+	}
 }
 
 func main() {
 	// http server
 	http.HandleFunc("/", rootFunc)
-	http.HandleFunc("/send", sendFunc)
-	http.HandleFunc("/u", uFunc)
-	http.HandleFunc("/del", delFunc)
-
+	if !REG {
+		http.HandleFunc("/send", sendFunc)
+		http.HandleFunc("/u", uFunc)
+		http.HandleFunc("/del", delFunc)
+	} else {
+		http.HandleFunc("/reg", regFunc)
+	}
 	log.Fatalln(http.ListenAndServe(PORT, nil))
 }
 
@@ -294,8 +350,46 @@ const ROOT_HTML = `<!DOCTYPE html>
     <hr/>
     <p>不要哀求 学会进取 若是如此 终有所获</p>
     <p>物来顺应 未来不迎 当时不杂 既过不恋</p>
+    <p>SimpleOIClass 4.0.0</p>
     <p>ZJYZIT LAB</p>
-    <p>2023.10.07</p>
+    <p>2023.10.08</p>
+  </body>
+</html>
+`
+
+const REG_HTML = `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Simple OI Class</title>
+  </head>
+  <body>
+    <font size="7">Simple OI Class</font>
+    <input type=button value=点击刷新 onclick="location=location" style="background:#DDFCFA;border-radius:30px;height:48px;width:256px;color:dodgerblue;" />
+    <hr/>
+    <div id="id">
+      <ul>
+        <li>IP:&nbsp&nbsp&nbsp&nbsp%s</li>
+        <li>Name:&nbsp&nbsp%s</li>
+      </ul>
+    </div>
+    <hr/>
+    <div id="reg">
+      <h2>提交姓名</h2>
+      <div style="background:#DDFCFA;border-radius:15px;">
+        <p>· 提交姓名，该名称将绑定此IP地址。</p>
+        <form method="post" action="/reg">
+          <input type="text" id="username" name="username" style="background:white;border-radius:3px;" />
+          <input type="submit" value="提交" />
+        </form>
+      </div>
+    </div>
+    <hr/>
+    <p>不要哀求 学会进取 若是如此 终有所获</p>
+    <p>物来顺应 未来不迎 当时不杂 既过不恋</p>
+    <p>SimpleOIClass 4.0.0</p>
+    <p>ZJYZIT LAB</p>
+    <p>2023.10.08</p>
   </body>
 </html>
 `
