@@ -2,8 +2,8 @@
 // work by 2207xuezihao (odorajbotoj)
 // Simple OI Class
 // server
-// version 4.0.0
-// 23 10 08
+// version 4.0.1
+// 23 10 09
 package main
 
 import (
@@ -20,12 +20,13 @@ import (
 )
 
 var ( // 默认配置
-	SEND_DIR      string = "send/"  // 教师下发的文件
-	UPLD_ROOT_DIR string = "upld/"  // 学生上传的文件根目录
-	ID_MAP_DIR    string = "idmap/" // ip与id的对照规则
-	PORT          string = ":8080"  // 服务使用的端口号
-	ACCEPT        string = ".cpp"   // 允许上传的文件后缀
-	REG           bool   = false    // 是否为注册模式
+	SEND_DIR      string = "send/"           // 教师下发的文件
+	UPLD_ROOT_DIR string = "upld/"           // 学生上传的文件根目录
+	ID_MAP_DIR    string = "idmap/"          // ip与id的对照规则
+	PORT          string = ":8080"           // 服务使用的端口号
+	ACCEPT        string = ".cpp"            // 允许上传的文件后缀
+	TITLE         string = "Simple OI Class" // 网页标题
+	REG           bool   = false             // 是否为注册模式
 )
 
 func readKVMap(filename string) map[string]string {
@@ -245,9 +246,9 @@ func rootFunc(w http.ResponseWriter, r *http.Request) {
 	id, _ := getID(ip)
 	log.Println(ip + " '" + id + "' connected.")
 	if !REG {
-		w.Write([]byte(fmt.Sprintf(ROOT_HTML, ip, id, getSend(), ACCEPT, ACCEPT, getUpld(ip))))
+		w.Write([]byte(fmt.Sprintf(ROOT_HTML, TITLE, TITLE, ip, id, getSend(), ACCEPT, ACCEPT, getUpld(ip))))
 	} else {
-		w.Write([]byte(fmt.Sprintf(REG_HTML, ip, id)))
+		w.Write([]byte(fmt.Sprintf(REG_HTML, TITLE, TITLE, ip, id)))
 	}
 	return
 }
@@ -256,7 +257,7 @@ func init() {
 	log.Println("ZJYZIT LAB")
 	log.Println("Simple OI Class")
 	log.Println("server")
-	log.Println("version 4.0.0")
+	log.Println("version 4.0.1")
 
 	config := readKVMap("config.txt")
 	if _, ok := config["SEND"]; ok {
@@ -278,6 +279,10 @@ func init() {
 	if _, ok := config["ACCEPT"]; ok {
 		ACCEPT = config["ACCEPT"]
 		log.Println("set ACCEPT = ", ACCEPT)
+	}
+	if _, ok := config["TITLE"]; ok {
+		TITLE = config["TITLE"]
+		log.Println("set TITLE = ", TITLE)
 	}
 	if v, ok := config["REG"]; ok {
 		if v == "ON" {
@@ -304,7 +309,7 @@ const ROOT_HTML = `<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Simple OI Class</title>
+    <title>%s</title>
     <style type="text/css">
       a:link{color: black;}
       a:visited{color: red;}
@@ -313,7 +318,7 @@ const ROOT_HTML = `<!DOCTYPE html>
     </style>
   </head>
   <body>
-    <font size="7">Simple OI Class</font>
+    <font size="7">%s</font>
     <input type=button value=点击刷新 onclick="location=location" style="background:#DDFCFA;border-radius:30px;height:48px;width:256px;color:dodgerblue;" />
     <hr/>
     <div id="id">
@@ -350,9 +355,9 @@ const ROOT_HTML = `<!DOCTYPE html>
     <hr/>
     <p>不要哀求 学会进取 若是如此 终有所获</p>
     <p>物来顺应 未来不迎 当时不杂 既过不恋</p>
-    <p>SimpleOIClass 4.0.0</p>
+    <p>SimpleOIClass 4.0.1</p>
     <p>ZJYZIT LAB</p>
-    <p>2023.10.08</p>
+    <p>2023.10.09</p>
   </body>
 </html>
 `
@@ -361,10 +366,10 @@ const REG_HTML = `<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Simple OI Class</title>
+    <title>%s</title>
   </head>
   <body>
-    <font size="7">Simple OI Class</font>
+    <font size="7">%s</font>
     <input type=button value=点击刷新 onclick="location=location" style="background:#DDFCFA;border-radius:30px;height:48px;width:256px;color:dodgerblue;" />
     <hr/>
     <div id="id">
@@ -387,9 +392,9 @@ const REG_HTML = `<!DOCTYPE html>
     <hr/>
     <p>不要哀求 学会进取 若是如此 终有所获</p>
     <p>物来顺应 未来不迎 当时不杂 既过不恋</p>
-    <p>SimpleOIClass 4.0.0</p>
+    <p>SimpleOIClass 4.0.1</p>
     <p>ZJYZIT LAB</p>
-    <p>2023.10.08</p>
+    <p>2023.10.09</p>
   </body>
 </html>
 `

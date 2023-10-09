@@ -4,11 +4,9 @@
 
 ---
 
-## ver 4.0.0 更新日志
+## ver 4.0.1 更新日志
 
-+ 现在可以通过REG模式让学生自行登记姓名了
-
-+ 现已兼容 `UTF-8 BOM` ，Windows记事本也能用！
++ 现在可以修改网页的标题了
 
 ## 安装
 
@@ -52,6 +50,8 @@
 
 + `ACCEPT` 为允许上传的文件类型（后缀），默认为 `.cpp` ，书写遵循HTML input标签accept属性，这个字符串是一个以逗号为分隔的唯一文件类型说明符列表。[参考](https://developer.mozilla.org/zh-CN/docs/Web/HTML/Element/Input/file#accept)
 
++ `TITLE` 可以设置网页的标题。
+
 + `REG` 为REG模式的开关。默认为 `OFF` 。当值为 `ON` 时，服务器处于REG模式。此模式下学生仅能完成姓名注册，无法使用其他功能。
 
 + 所有内容仅在服务器启动时读取一次，若服务器运行中作了修改，请重启服务器。
@@ -60,4 +60,4 @@
 
 odorajbotoj @ ZJYZITLAB
 
-2023.10.08
+2023.10.09
